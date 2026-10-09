@@ -15,6 +15,7 @@ from pypdf import PdfReader
 
 import config
 
+NSE_BASE = "https://nsearchives.nseindia.com/content/circulars/"
 CSV_FILE = "t2t_data.csv"
 OVERRIDE_FILE = "manual_overrides.csv"
 COLUMNS = ["Exchange", "Listing Date", "Co. Name", "Symbol", "Out of T2T", "Type", "Circular"]
@@ -161,20 +162,28 @@ def nse_list(s, days):
     r.raise_for_status()
     raw = r.json()
     items = raw.get("data", []) if isinstance(raw, dict) else raw
-    out = []
+    out, seen_urls = [], set()
     for x in items:
-        out.append({"subject": x.get("sub") or x.get("subject") or "",
-                    "url": x.get("circFilename") or x.get("fileURL") or x.get("url") or ""})
+        url = x.get("circFilename") or x.get("fileURL") or x.get("url") or ""
+        if url and not url.startswith("http"):
+            url = NSE_BASE + url
+        if not url.lower().endswith(".pdf") or url in seen_urls:
+            continue                      # skip zip files and repeated entries
+        seen_urls.add(url)
+        out.append({"subject": x.get("sub") or x.get("subject") or "", "url": url})
     return out
+
+def html_to_text(raw):
+    import html as _h
+    raw = re.sub(r"(?is)<(script|style).*?</\1>", " ", raw)
+    raw = re.sub(r"(?s)<[^>]+>", "\n", raw)
+    return _h.unescape(raw)
 
 def get_text(s, url):
     r = s.get(url, timeout=40)
     if r.content[:4] == b"%PDF":
         return pdf_text(r.content)
-    html = re.sub(r"(?is)<(script|style).*?</\\1>", " ", r.text)
-    html = re.sub(r"(?s)<[^>]+>", "\n", html)
-    import html as _h
-    return _h.unescape(html)
+    return html_to_text(r.text)
 
 def load_lockin():
     """name -> listing date, from your lock-in CSV."""
@@ -197,7 +206,7 @@ def listing_from_circular(s, text):
     m = re.search(r"NSE/CML/(\d+)", text)
     if not m: return None
     try:
-        t = get_text(s, f"https://nsearchives.nseindia.com/content/circulars/CML{m.group(1)}.pdf")
+        t = get_text(s, f"{NSE_BASE}CML{m.group(1)}.pdf")
         return date_after(clean(t), ["with effect from", "w.e.f", "listed", "dealings"])
     except Exception:
         return None
@@ -210,27 +219,37 @@ def bse_scan(days):
     for the last few days and keep the ones whose subject matches your keyword."""
     seen = set(open(SEEN_FILE).read().split()) if os.path.exists(SEEN_FILE) else set()
     sess = requests.Session()
-    sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/"})
-    hits = []
+    sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/",
+                         "Accept-Language": "en-US,en;q=0.9"})
+    try: sess.get("https://www.bseindia.com/", timeout=20)
+    except Exception: pass
+    hits, ok, bad, shown = [], 0, 0, False
     for back in range(days):
         day = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
         n, misses = 1, 0
-        while misses < 6 and n < 400:
+        while misses < 4 and n < 300:
             nid = f"{day}-{n}"; n += 1
             if nid in seen:
                 misses = 0; continue
             try:
-                text = get_text(sess, BSE_NOTICE_PAGE + nid)
-            except Exception:
-                misses += 1; continue
+                r = sess.get(BSE_NOTICE_PAGE + nid, timeout=20)
+                text = html_to_text(r.text)
+            except Exception as e:
+                misses += 1; bad += 1
+                if not shown: print("   BSE debug: request error:", e); shown = True
+                continue
             if "notice no" not in text.lower():
-                misses += 1; continue
-            misses = 0; seen.add(nid)
+                misses += 1; bad += 1
+                if not shown:
+                    print("   BSE debug: page", nid, "status", r.status_code, "text start:",
+                          re.sub(r"\s+", " ", text)[:200]); shown = True
+                continue
+            misses = 0; ok += 1; seen.add(nid)
             if matches(text, config.BSE_SUBJECT_KEYWORDS):
                 hits.append({"subject": f"BSE notice {nid}", "url": BSE_NOTICE_PAGE + nid, "text": text})
-            time.sleep(0.3)
+            time.sleep(0.2)
     open(SEEN_FILE, "w").write("\n".join(sorted(seen)))
-    print(f"BSE: scanned notices, {len(hits)} match your keyword")
+    print(f"BSE: opened {ok} notices ({bad} empty/failed), {len(hits)} match your keyword")
     return sess, hits
 
 # ---------------------------------------------------------------
@@ -264,7 +283,8 @@ def main():
     try:
         s = nse_session()
         lst = nse_list(s, config.LOOKBACK_DAYS)
-        hit = [x for x in lst if x["url"] and matches(x["subject"], config.NSE_SUBJECT_KEYWORDS)]
+        hit = [x for x in lst if matches(x["subject"], config.NSE_SUBJECT_KEYWORDS)
+               and matches(x["subject"], config.NSE_SUBJECT_MUST_ALSO_HAVE)]
         print(f"NSE: {len(lst)} circulars, {len(hit)} match your keyword")
         jobs += [("NSE", s, x, parse_nse) for x in hit]
     except Exception as e:

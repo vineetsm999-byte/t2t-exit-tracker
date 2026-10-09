@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T2T Exit Tracker</title>
+<style>
+  :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--hd:#f3f4f6;--soon:#fff4cc;--today:#ffd6d6}
+  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--fg:#eee;--mut:#9aa;--line:#333;--hd:#22252c;--soon:#4a3f12;--today:#5a1f1f}}
+  body{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--mut);font-size:13px;margin-bottom:12px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  button,input{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:14px}
+  button.on{background:var(--fg);color:var(--bg)}
+  .wrap{overflow-x:auto} table{border-collapse:collapse;width:100%;font-size:14px;white-space:nowrap}
+  th,td{border:1px solid var(--line);padding:8px;text-align:left}
+  th{background:var(--hd)} .soon{background:var(--soon)} .today{background:var(--today)} a{color:inherit}
+</style>
+</head>
+<body>
+<h1>IPO &amp; Demerger T2T Exit Tracker</h1>
+<div class="sub" id="info">Loading...</div>
+<div class="bar" id="bar"></div>
+<div class="wrap"><table><thead><tr>
+<th>Exchange</th><th>Listing Date</th><th>Co. Name</th><th>Symbol</th><th>Out of T2T</th><th>Days left</th><th>Circular</th>
+</tr></thead><tbody id="rows"></tbody></table></div>
+<script>
+let data=[], seg="All", q="", upcoming=false;
+const today=new Date(); today.setHours(0,0,0,0);
+function parse(s){ if(!s) return null; const [d,m,y]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function csv(t){ const rows=[]; let r=[],c="",inq=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(inq){ if(ch=='"'&&t[i+1]=='"'){c+='"';i++;} else if(ch=='"') inq=false; else c+=ch; }
+    else if(ch=='"') inq=true; else if(ch==','){r.push(c);c="";}
+    else if(ch=='\n'){r.push(c);rows.push(r);r=[];c="";} else if(ch!='\r') c+=ch; }
+  if(c||r.length){r.push(c);rows.push(r);} return rows; }
+function draw(){
+  const body=document.getElementById("rows"); body.innerHTML="";
+  data.filter(r=>(seg=="All"||r.Type==seg)&&(!q||(r["Co. Name"]+r.Symbol+r.Exchange).toLowerCase().includes(q))
+     &&(!upcoming||(parse(r["Out of T2T"])&&parse(r["Out of T2T"])>=today)))
+   .forEach(r=>{
+    const d=parse(r["Out of T2T"]); const left=d?Math.round((d-today)/864e5):"";
+    const tr=document.createElement("tr");
+    if(d&&left===0) tr.className="today"; else if(d&&left>0&&left<=3) tr.className="soon";
+    const link=r.Circular?`<a href="${esc(r.Circular)}" target="_blank" rel="noopener">PDF</a>`:"";
+    [esc(r.Exchange),esc(r["Listing Date"]),esc(r["Co. Name"]),esc(r.Symbol),esc(r["Out of T2T"]),
+     left===""?"-":(left<0?"exited":left),link].forEach(v=>{const e=document.createElement("td");e.innerHTML=v;tr.appendChild(e);});
+    body.appendChild(tr); });
+}
+function bar(){
+  const b=document.getElementById("bar");
+  ["All","Mainboard","SME","Demerger"].forEach(s=>{const x=document.createElement("button");x.textContent=s;
+    x.onclick=()=>{seg=s;[...b.querySelectorAll("button.seg")].forEach(y=>y.classList.toggle("on",y===x));draw();};
+    x.className="seg"+(s=="All"?" on":""); b.appendChild(x);});
+  const u=document.createElement("button");u.textContent="Upcoming only";u.onclick=()=>{upcoming=!upcoming;u.classList.toggle("on",upcoming);draw();};b.appendChild(u);
+  const i=document.createElement("input");i.placeholder="Search company / symbol...";i.oninput=()=>{q=i.value.toLowerCase();draw();};b.appendChild(i);
+}
+fetch("t2t_data.csv?"+Date.now()).then(r=>r.text()).then(t=>{
+  const rows=csv(t).filter(r=>r.length>1); const h=rows.shift();
+  data=rows.map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]||""])));
+  document.getElementById("info").textContent=data.length+" stocks. Yellow = exits within 3 days, red = exits today.";
+  bar(); draw();
+}).catch(()=>document.getElementById("info").textContent="Could not load t2t_data.csv");
+</script>
+</body>
+</html>

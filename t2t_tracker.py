@@ -245,6 +245,9 @@ def bse_scan(days):
                           re.sub(r"\s+", " ", text)[:200]); shown = True
                 continue
             misses = 0; ok += 1; seen.add(nid)
+            text = re.sub(r"\s+", " ", text)          # subject may be split over lines/spaces
+            if ok <= 3:
+                print("   BSE sample", nid, "->", text[:260])
             if matches(text, config.BSE_SUBJECT_KEYWORDS):
                 hits.append({"subject": f"BSE notice {nid}", "url": BSE_NOTICE_PAGE + nid, "text": text})
             time.sleep(0.2)

@@ -6,6 +6,7 @@ LOOKBACK_DAYS = 45          # how many days back to look on every run
 
 # A circular is picked up if its SUBJECT contains any of these (not case sensitive)
 NSE_SUBJECT_KEYWORDS = ["trade for trade"]
+NSE_SUBJECT_MUST_ALSO_HAVE = ["ipo", "demerg", "scheme of arrangement"]
 BSE_SUBJECT_KEYWORDS = ["change in group of equity shares"]
 
 # The circular TEXT must contain one of these phrases, so that we only keep

@@ -127,21 +127,51 @@ def parse_nse(text):
 
 def parse_bse(text):
     """
-    BSE notice layout (seen in a real notice): one company per notice
-      'Change in Group of Equity Shares of PARAMOUNT SYNTEX LIMITED'
-      '... equity shares of PARAMOUNT SYNTEX LIMITED - SME IPO (Scrip Code: 544982) shall be
-       transferred from Trade for Trade segment (MT Group) to Rolling segment with effect from
-       Monday, October 26, 2026.'
+    Parse BSE T2T exit notices. Handles common wording variations:
+    company shares transferred from Trade-for-Trade to Rolling segment.
+    Returns (effective_date, [(scrip_code, company_name)]).
     """
-    flat = re.sub(r"\s+", " ", clean(text))
+    flat = re.sub(r"\s+", " ", clean(text)).strip()
     low = flat.lower()
-    if "trade for trade" not in low or "rolling" not in low:
+
+    # Require both the source segment and destination segment; this avoids
+    # treating ordinary T2T inclusion notices as exits.
+    if "trade for trade" not in low:
         return None, []
-    exit_date = date_after(flat, ["with effect from", "w.e.f", "wef", "effective from"])
-    m = re.search(r"shares of\s+((?:(?!shares of).)+?)\s+[-\u2013]\s+[^()]*?\(\s*scrip code\s*:?\s*(\d{5,6})\s*\)", flat, re.I)
-    if not m:
-        return exit_date, []
-    return exit_date, [(m.group(2), m.group(1).strip())]
+    if not re.search(r"\brolling\s+(?:segment|settlement|group)\b|\brolling segment\b", low):
+        return None, []
+
+    exit_date = date_after(
+        flat,
+        ["with effect from", "with effect", "w.e.f.", "w.e.f", "wef", "effective from"]
+    )
+
+    # Most BSE notices put the company name before "Scrip Code".
+    patterns = [
+        r"(?:equity\s+)?shares?\s+of\s+(.+?)\s*[-–—]\s*[^.]{0,100}?\(\s*scrip\s*code\s*:?\s*(\d{5,6})\s*\)",
+        r"(?:equity\s+)?shares?\s+of\s+(.+?)\s*\(\s*scrip\s*code\s*:?\s*(\d{5,6})\s*\)",
+        r"change in group of equity shares of\s+(.+?)\s*\(\s*scrip\s*code\s*:?\s*(\d{5,6})\s*\)",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, flat, re.I)
+        if m:
+            name = re.sub(r"\s+", " ", m.group(1)).strip(" -–—:;,.")
+            # Remove generic suffixes from the captured company title, not company identity.
+            name = re.sub(r"\s*-\s*(?:SME\s+IPO|IPO)\s*$", "", name, flags=re.I).strip()
+            if name:
+                return exit_date, [(m.group(2), name)]
+
+    # Some notices put the scrip code first and company name in the heading.
+    code_match = re.search(r"\bscrip\s*code\s*:?\s*(\d{5,6})\b", flat, re.I)
+    heading_match = re.search(
+        r"(?:change in group of equity shares of|equity shares of)\s+(.+?)(?:\.|;|,|\s+shall\b|\s+will\b)",
+        flat, re.I
+    )
+    if code_match and heading_match:
+        name = heading_match.group(1).strip(" -–—:;,.")
+        return exit_date, [(code_match.group(1), name)]
+
+    return exit_date, []
 
 # ---------------------------------------------------------------
 # 4. FETCHING
@@ -215,44 +245,123 @@ BSE_NOTICE_PAGE = "https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCir
 SEEN_FILE = "bse_seen.txt"
 
 def bse_scan(days):
-    """BSE notices are numbered like 20261009-4 (date-number). We open them one by one
-    for the last few days and keep the ones whose subject matches your keyword."""
-    seen = set(open(SEEN_FILE).read().split()) if os.path.exists(SEEN_FILE) else set()
+    """
+    Scan BSE's official notice-detail pages for recent dates.
+
+    BSE detail URL format:
+      https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCirculars.aspx?page=YYYYMMDD-N
+
+    The old implementation stopped after only four consecutive missing notice
+    numbers. Gaps in numbering could therefore hide valid notices. This version
+    allows a larger gap, verifies that the response is a real notice page, and
+    stores the exact notice URL/text for parsing.
+    """
+    seen = set()
+    if os.path.exists(SEEN_FILE):
+        try:
+            with open(SEEN_FILE, "r", encoding="utf-8") as f:
+                seen = set(x.strip() for x in f if x.strip())
+        except OSError:
+            pass
+
     sess = requests.Session()
-    sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/",
-                         "Accept-Language": "en-US,en;q=0.9"})
-    try: sess.get("https://www.bseindia.com/", timeout=20)
-    except Exception: pass
-    hits, ok, bad, shown = [], 0, 0, False
-    for back in range(days):
+    sess.headers.update({
+        "User-Agent": UA,
+        "Referer": "https://www.bseindia.com/markets/MarketInfo/NoticesCirculars.aspx",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    })
+
+    # Establish cookies, but don't fail the complete scan if the landing page
+    # occasionally times out.
+    try:
+        sess.get(
+            "https://www.bseindia.com/markets/MarketInfo/NoticesCirculars.aspx",
+            timeout=20
+        )
+    except requests.RequestException as e:
+        print("   BSE landing page warning:", e)
+
+    hits, opened, failed, sample_printed = [], 0, 0, False
+    max_notice_number = 120
+    max_consecutive_misses = 12
+
+    for back in range(max(1, int(days))):
         day = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
-        n, misses = 1, 0
-        while misses < 4 and n < 300:
-            nid = f"{day}-{n}"; n += 1
+        misses = 0
+
+        for number in range(1, max_notice_number + 1):
+            nid = f"{day}-{number}"
             if nid in seen:
-                misses = 0; continue
+                # Already checked in a previous run. Continue through the
+                # sequence without treating it as a missing notice.
+                continue
+
+            url = BSE_NOTICE_PAGE + nid
             try:
-                r = sess.get(BSE_NOTICE_PAGE + nid, timeout=20)
-                text = html_to_text(r.text)
-            except Exception as e:
-                misses += 1; bad += 1
-                if not shown: print("   BSE debug: request error:", e); shown = True
-                continue
-            if "notice no" not in text.lower():
-                misses += 1; bad += 1
-                if not shown:
-                    print("   BSE debug: page", nid, "status", r.status_code, "text start:",
-                          re.sub(r"\s+", " ", text)[:200]); shown = True
-                continue
-            misses = 0; ok += 1; seen.add(nid)
-            text = re.sub(r"\s+", " ", text)          # subject may be split over lines/spaces
-            if ok <= 3:
-                print("   BSE sample", nid, "->", text[:260])
-            if matches(text, config.BSE_SUBJECT_KEYWORDS):
-                hits.append({"subject": f"BSE notice {nid}", "url": BSE_NOTICE_PAGE + nid, "text": text})
-            time.sleep(0.2)
-    open(SEEN_FILE, "w").write("\n".join(sorted(seen)))
-    print(f"BSE: opened {ok} notices ({bad} empty/failed), {len(hits)} match your keyword")
+                response = sess.get(url, timeout=20, allow_redirects=True)
+                if response.status_code != 200:
+                    misses += 1
+                    failed += 1
+                    if misses >= max_consecutive_misses:
+                        break
+                    continue
+
+                raw_html = response.text or ""
+                text = re.sub(r"\s+", " ", html_to_text(raw_html)).strip()
+                low = text.lower()
+
+                # BSE may return a generic error/search page with HTTP 200.
+                is_notice = (
+                    ("notice no" in low or "notice number" in low)
+                    and ("subject" in low or "content" in low or "trade for trade" in low)
+                )
+                if not is_notice:
+                    misses += 1
+                    failed += 1
+                    if misses >= max_consecutive_misses:
+                        break
+                    continue
+
+                misses = 0
+                opened += 1
+                seen.add(nid)
+
+                if not sample_printed:
+                    print(f"   BSE sample {nid} -> {text[:350]}")
+                    sample_printed = True
+
+                # Match against the notice text as well as the subject keywords
+                # because BSE's detail page may not expose a clean subject field.
+                if matches(text, config.BSE_SUBJECT_KEYWORDS):
+                    hits.append({
+                        "subject": f"BSE notice {nid}",
+                        "url": url,
+                        "text": text,
+                    })
+
+                time.sleep(0.15)
+
+            except requests.RequestException as e:
+                failed += 1
+                misses += 1
+                if not sample_printed:
+                    print("   BSE request warning:", e)
+                    sample_printed = True
+                if misses >= max_consecutive_misses:
+                    break
+
+    try:
+        with open(SEEN_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(sorted(seen)))
+    except OSError as e:
+        print("   Could not update BSE seen file:", e)
+
+    print(
+        f"BSE: opened {opened} valid notices ({failed} empty/failed requests), "
+        f"{len(hits)} match your keywords"
+    )
     return sess, hits
 
 # ---------------------------------------------------------------

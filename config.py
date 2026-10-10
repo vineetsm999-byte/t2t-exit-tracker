@@ -17,5 +17,5 @@ NSE_EXIT_PHRASES = ["rolling segment"]
 LOCKIN_CSV_URL = ("https://raw.githubusercontent.com/vineetsm999-byte/"
                   "ipo---lockin/main/lockin_data.csv")
 
-# BSE: how many past days of notices to open on each run
-BSE_SCAN_DAYS = 3
+# BSE: how many past days of notices to check on each run
+BSE_SCAN_DAYS = 30

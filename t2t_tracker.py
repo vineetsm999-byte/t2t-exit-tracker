@@ -212,48 +212,69 @@ def listing_from_circular(s, text):
         return None
 
 BSE_NOTICE_PAGE = "https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCirculars.aspx?page="
-SEEN_FILE = "bse_seen.txt"
+BSE_LIST_PAGE = "https://www.bseindia.com/markets/MarketInfo/NoticesCirculars.aspx?id=0"
+BSE_LIST_API = "https://api.bseindia.com/BseIndiaAPI/api/getDataAdvance_New/w"
 
-def bse_scan(days):
-    """BSE notices are numbered like 20261009-4 (date-number). We open them one by one
-    for the last few days and keep the ones whose subject matches your keyword."""
-    seen = set(open(SEEN_FILE).read().split()) if os.path.exists(SEEN_FILE) else set()
-    sess = requests.Session()
-    sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/",
-                         "Accept-Language": "en-US,en;q=0.9"})
-    try: sess.get("https://www.bseindia.com/", timeout=20)
-    except Exception: pass
-    hits, ok, bad, shown = [], 0, 0, False
-    for back in range(days):
-        day = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
-        n, misses = 1, 0
-        while misses < 4 and n < 300:
-            nid = f"{day}-{n}"; n += 1
-            if nid in seen:
-                misses = 0; continue
+def flat(t):
+    return re.sub(r"\s+", " ", t or "")
+
+def bse_playwright(days):
+    """BSE hides its notices behind JavaScript, so we open a real (headless) Chrome
+    browser, ask BSE's own list for the last few days, keep notices whose subject
+    matches your keyword, then open each one and read its text."""
+    import json
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:
+        print("BSE: playwright not installed:", e); return None, []
+    end = datetime.now(); start = end - timedelta(days=days)
+    api = (f"{BSE_LIST_API}?strTxtDate={start:%Y-%m-%d}&strTxtTodate={end:%Y-%m-%d}&strSegment=")
+    found = []            # (notice_no, subject)
+    hits = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        ctx = browser.new_context(user_agent=UA, locale="en-IN")
+        page = ctx.new_page()
+        try:
+            page.goto(BSE_LIST_PAGE, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(5000)
+            res = page.evaluate("""async (u) => { try { const r = await fetch(u);
+                 return {status: r.status, text: await r.text()}; }
+                 catch (e) { return {status: 0, text: String(e)}; } }""", api)
+            print("BSE list API status:", res["status"], "| start:", flat(res["text"])[:150])
             try:
-                r = sess.get(BSE_NOTICE_PAGE + nid, timeout=20)
-                text = html_to_text(r.text)
+                rows = (json.loads(res["text"]) or {}).get("Table") or []
+            except Exception:
+                rows = []
+            for r in rows:
+                no = r.get("Notice_No") or r.get("NOTICE_NO") or r.get("NoticeNo") or ""
+                sub = r.get("Subject") or r.get("SUBJECT") or r.get("subject") or ""
+                if no: found.append((no, flat(sub)))
+            print("BSE list: notices from API:", len(found))
+            for no, sub in found[:3]: print("   BSE list sample:", no, sub[:80])
+            if not found:       # fallback: read the notice list page text itself
+                body = flat(page.inner_text("body"))
+                for m in re.finditer(r"(\d{8}-\d+)\s+(Change in Group of Equity Shares.{0,120}?)(?=\s\d{8}-\d+|$)", body, re.I):
+                    found.append((m.group(1), flat(m.group(2))))
+                print("BSE list: notices from page text:", len(found))
+        except Exception as e:
+            print("BSE list failed:", e)
+        want = [(no, sub) for no, sub in found if matches(sub, config.BSE_SUBJECT_KEYWORDS)]
+        print(f"BSE: {len(found)} notices, {len(want)} match your keyword")
+        for no, sub in want:
+            try:
+                page.goto(BSE_NOTICE_PAGE + no, wait_until="domcontentloaded", timeout=60000)
+                try:
+                    page.wait_for_function("document.body.innerText.toLowerCase().includes('trading members')", timeout=15000)
+                except Exception:
+                    page.wait_for_timeout(4000)
+                text = flat(page.inner_text("body"))
+                print("   BSE notice", no, "->", text[:260])
+                hits.append({"subject": f"BSE notice {no}: {sub}", "url": BSE_NOTICE_PAGE + no, "text": text})
             except Exception as e:
-                misses += 1; bad += 1
-                if not shown: print("   BSE debug: request error:", e); shown = True
-                continue
-            if "notice no" not in text.lower():
-                misses += 1; bad += 1
-                if not shown:
-                    print("   BSE debug: page", nid, "status", r.status_code, "text start:",
-                          re.sub(r"\s+", " ", text)[:200]); shown = True
-                continue
-            misses = 0; ok += 1; seen.add(nid)
-            text = re.sub(r"\s+", " ", text)          # subject may be split over lines/spaces
-            if ok <= 3:
-                print("   BSE sample", nid, "->", text[:260])
-            if matches(text, config.BSE_SUBJECT_KEYWORDS):
-                hits.append({"subject": f"BSE notice {nid}", "url": BSE_NOTICE_PAGE + nid, "text": text})
-            time.sleep(0.2)
-    open(SEEN_FILE, "w").write("\n".join(sorted(seen)))
-    print(f"BSE: opened {ok} notices ({bad} empty/failed), {len(hits)} match your keyword")
-    return sess, hits
+                print("   BSE notice", no, "failed:", e)
+        browser.close()
+    return None, hits
 
 # ---------------------------------------------------------------
 # 5. CSV
@@ -294,7 +315,7 @@ def main():
         print("NSE failed:", e)
 
     try:
-        bs, hits = bse_scan(config.BSE_SCAN_DAYS)
+        bs, hits = bse_playwright(config.BSE_SCAN_DAYS)
         jobs += [("BSE", bs, x, parse_bse) for x in hits]
     except Exception as e:
         print("BSE failed:", e)

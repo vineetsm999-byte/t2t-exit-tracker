@@ -74,6 +74,7 @@ def date_after(text, phrases, window=60):
 def clean(text):
     for bad, good in (("\u01af", "ff"), ("\ufb00", "ff"), ("\ufb01", "fi"), ("\ufb02", "fl"), ("\ufb03", "ffi")):
         text = text.replace(bad, good)       # PDF ligatures: 'e\u01afect' -> 'effect'
+    text = text.replace("^", "")              # '8^th October' -> '8th October'
     return re.sub(r"[ \t]+", " ", text.replace("\r", ""))
 
 def pdf_text(content):
@@ -169,6 +170,30 @@ def parse_bse(text):
         return exit_date, []
     return exit_date, [(m.group(2), m.group(1).strip())]
 
+TGRP = r"(?:[\u2018\u2019'\"`]\s*(?:t|xt|mt|ts)\s*[\u2018\u2019'\"`]\s*group|\b(?:t|xt|mt|ts)\s+group\b)"
+
+def bse_fallback_info(text):
+    """Other BSE group-change wordings, e.g. 'transferred from B Group to T group w.e.f. 8 October 2026'.
+    Returns (name, scrip_code, exit_date_or_None, note) or None if the notice is not about T / MT group."""
+    f = re.sub(r"\s+", " ", clean(text))
+    low = f.lower()
+    if not (re.search(TGRP, low) or re.search(r"trade[\s-]*(for|to)[\s-]*trade", low)):
+        return None
+    m = re.search(r"shares of\s+((?:(?!shares of).)+?)\s*\(\s*scrip\s*code\s*:?\s*(\d{5,6})\s*\)", f, re.I)
+    name, code = (m.group(1), m.group(2)) if m else ("", "")
+    if not code:
+        mc = re.search(r"scrip\s*code\s*:?\s*(\d{5,6})", f, re.I)
+        code = mc.group(1) if mc else ""
+    if not name:
+        mn = re.search(r"shares of\s+((?:(?!shares of).)+?(?:Limited|Ltd\.?))", f, re.I)
+        name = mn.group(1) if mn else "BSE scrip " + code
+    name = re.sub(r"\s+[-\u2013]\s+(SME\s+)?IPO\s*$", "", name).strip()
+    d = date_after(f, ["w.e.f", "wef", "with effect from", "effective from", "effective date"])
+    t = r"[\u2018\u2019'\"`]?\s*(?:t|xt|mt|ts)\s*[\u2018\u2019'\"`]?"
+    if re.search(r"from\s*" + t + r"\s*(?:group)?\s*to", low):
+        return name, code, d, "Moves OUT of T group - check notice"
+    return name, code, None, ("Moves INTO T group w.e.f. " + fmt(d) if d else "T group notice - check notice")
+
 # ---------------------------------------------------------------
 # 4. FETCHING
 # ---------------------------------------------------------------
@@ -261,6 +286,25 @@ def find_listing(s, lst, name, exit_dt, circ_url, circ_text=None):
 
 BSE_PDF = "https://www.bseindia.com/downloads/UploadDocs/Notices/{id}/{id}.pdf"
 BSE_SEEN = "bse_seen.txt"
+BSE_LIST_FILE = "bse_listings.csv"
+BSE_LISTINGS = {}      # normalised company name -> listing date (from BSE listing notices)
+
+def load_bse_listings():
+    for r in (csv.DictReader(open(BSE_LIST_FILE, encoding="utf-8")) if os.path.exists(BSE_LIST_FILE) else []):
+        try: BSE_LISTINGS[r["key"]] = datetime.strptime(r["listing"], DATE_FMT)
+        except Exception: pass
+
+def save_bse_listings():
+    with open(BSE_LIST_FILE, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f); w.writerow(["key", "listing"])
+        for k, d in sorted(BSE_LISTINGS.items()): w.writerow([k, fmt(d)])
+
+def note_bse_listing(text):
+    f = re.sub(r"\s+", " ", text)
+    m = re.search(r"Listing of Equity Shares of\s+(.+?)\s+(?:Ltd\.?|Limited)", f[:600], re.I)
+    if not m: return
+    d = date_after(f, ["effective from", "w.e.f", "with effect from"])
+    if d: BSE_LISTINGS[norm_name(m.group(1))] = d
 
 def bse_pdf_scan(days):
     """BSE notices are numbered like 20260602-3 (date-number) and each one is a PDF at a fixed address.
@@ -275,7 +319,7 @@ def bse_pdf_scan(days):
     for back in range(days):
         day = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
         n, misses = 1, 0
-        while misses < 4 and n < 250:
+        while misses < 15 and n < 300:
             nid = f"{day}-{n}"; n += 1
             if nid in seen:
                 misses = 0; continue
@@ -291,6 +335,7 @@ def bse_pdf_scan(days):
                 misses = 0; ok += 1
                 if day != today: seen.add(nid)           # today's list may still grow
                 text = clean(pdf_text(r.content))
+                note_bse_listing(text)
                 if matches(flat(text), config.BSE_SUBJECT_KEYWORDS):
                     print("   BSE notice found:", nid)
                     hits.append({"subject": f"BSE notice {nid}: Change in Group of Equity Shares",
@@ -300,6 +345,7 @@ def bse_pdf_scan(days):
                 if not shown:
                     print("   BSE debug:", nid, "status", r.status_code, "|", flat(r.text)[:120]); shown = True
     open(BSE_SEEN, "w").write("\n".join(sorted(seen)))
+    save_bse_listings()
     print(f"BSE: opened {ok} notice PDFs, responses {codes}, {len(hits)} match your keyword")
     return None, hits
 
@@ -402,7 +448,16 @@ def process_item(exch, sess, item, parser, rows, lockin, lst, done_urls):
     typ = nse_type(item["subject"], text) if exch == "NSE" else stock_type(item["subject"], text)
     if not exit_date or not stocks:
         if exch != "NSE":
-            print("   no exit date / stock rows found - skipped"); return 0
+            info = bse_fallback_info(text)
+            if not info:
+                print("   not about T / MT group - skipped"); return 0
+            name, code, d2, note = info
+            ld = lockin.get(norm_name(name)) or BSE_LISTINGS.get(norm_name(name))
+            print("   BSE T-group notice saved:", name, code, "|", note)
+            rows.append({"Exchange": "BSE", "Listing Date": fmt(ld), "Co. Name": name, "Symbol": code,
+                         "Out of T2T": fmt(d2), "Type": typ, "Circular": item["url"], "Note": note})
+            done_urls.add(item["url"])
+            return 1
         name, sym, note = fallback_row_info(item["subject"], text)
         print("   no 'rolling segment' table - saved with a note:", name)
         rows.append({"Exchange": exch, "Listing Date": "", "Co. Name": name, "Symbol": sym,
@@ -412,6 +467,8 @@ def process_item(exch, sess, item, parser, rows, lockin, lst, done_urls):
     n = 0
     for sym, name in stocks:
         ld = lockin.get(norm_name(name))
+        if not ld and exch == "BSE":
+            ld = BSE_LISTINGS.get(norm_name(name))
         if not ld and exch == "NSE":
             ld = find_listing(sess, lst, name, exit_date, item["url"], text)
         rows.append({"Exchange": exch, "Listing Date": fmt(ld), "Co. Name": name,
@@ -425,6 +482,7 @@ def process_item(exch, sess, item, parser, rows, lockin, lst, done_urls):
 def main():
     rows = load_csv(CSV_FILE)
     lockin = load_lockin()
+    load_bse_listings()
     added = 0
 
     jobs = []
@@ -443,6 +501,7 @@ def main():
         for r in rows:
             try:
                 if r.get("Exchange") != "NSE": continue
+                if not r.get("Out of T2T"): continue
                 if r.get("Listing Date") and r["Listing Date"] != r.get("Out of T2T"): continue
                 exit_dt = datetime.strptime(r["Out of T2T"], DATE_FMT)
                 ld = lockin.get(norm_name(r["Co. Name"])) or find_listing(
@@ -467,6 +526,11 @@ def main():
             import traceback
             print("   ERROR on this circular, skipped:", item.get("subject", "")[:70], "->", repr(e))
             traceback.print_exc()
+
+    for r in rows:                              # fill blank BSE listing dates from BSE listing notices / lock-in sheet
+        if r.get("Exchange") == "BSE" and not r.get("Listing Date"):
+            ld = lockin.get(norm_name(r.get("Co. Name", ""))) or BSE_LISTINGS.get(norm_name(r.get("Co. Name", "")))
+            if ld: r["Listing Date"] = fmt(ld)
 
     # manual fixes win (matched on Exchange + Symbol)
     for o in load_csv(OVERRIDE_FILE):

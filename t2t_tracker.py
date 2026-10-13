@@ -18,7 +18,7 @@ import config
 NSE_BASE = "https://nsearchives.nseindia.com/content/circulars/"
 CSV_FILE = "t2t_data.csv"
 OVERRIDE_FILE = "manual_overrides.csv"
-COLUMNS = ["Exchange", "Listing Date", "Co. Name", "Symbol", "Out of T2T", "Type", "Circular"]
+COLUMNS = ["Exchange", "Listing Date", "Co. Name", "Symbol", "Out of T2T", "Type", "Circular", "Note"]
 DATE_FMT = "%d-%m-%Y"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -90,6 +90,30 @@ def stock_type(subject, text):
     if "demerg" in blob or "scheme of arrangement" in blob: return "Demerger"
     if "sme" in blob or "emerge" in blob: return "SME"
     return "Mainboard"
+
+def nse_subject_ok(subject):
+    """Take every circular that has 'trade for trade' anywhere in its subject."""
+    return "trade for trade" in subject.lower()
+
+def nse_type(subject, text=""):
+    low = subject.lower()
+    if "sme" in low: return "SME"
+    if "ipo" in low: return "Mainboard"
+    if re.search(r"demerg|scheme of arrangement|resulting company", text.lower()): return "Demerger"
+    return "Other"
+
+def fallback_row_info(subject, text):
+    """When the circular has no 'moved to rolling segment' table: build a row from the subject."""
+    body = re.sub(r"\s+", " ", text)
+    m = re.search(r"([^.]*trade for trade[^.]*\.)", body, re.I)
+    note = ("Check circular: " + (m.group(1).strip() if m else body[:160]))[:220]
+    name = re.sub(r"^\s*trade for trade\s*[-\u2013:]*\s*", "", subject, flags=re.I)
+    sym = ""
+    sm = re.search(r"\(\s*([A-Z0-9&\-]{2,20})\s*\)\s*$", name)
+    if sm and sm.group(1) != "IPO":
+        sym = sm.group(1)
+    name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip() or subject
+    return name, sym, note
 
 def matches(subject, keywords):
     return any(k.lower() in subject.lower() for k in keywords)
@@ -200,16 +224,38 @@ def load_lockin():
     except Exception as e:
         print("Could not load lock-in sheet:", e); return {}
 
-def listing_from_circular(s, text):
-    """Fallback: open the earlier circular mentioned in the text (e.g. NSE/CML/76763)
-    and read the listing date from it. Address pattern is a guess - may return None."""
-    m = re.search(r"NSE/CML/(\d+)", text)
-    if not m: return None
+LISTING_PHRASES = ["admitted to dealings", "dealings on", "commence", "listed", "with effect from", "w.e.f"]
+
+def read_listing_date(s, url, exit_dt):
+    """Open a listing circular and read the listing date. Returns None if it looks wrong."""
     try:
-        t = get_text(s, f"{NSE_BASE}CML{m.group(1)}.pdf")
-        return date_after(clean(t), ["with effect from", "w.e.f", "listed", "dealings"])
+        t = get_text(s, url)
     except Exception:
         return None
+    d = date_after(clean(t), LISTING_PHRASES, window=130)
+    if d and exit_dt and d < exit_dt and (exit_dt - d).days <= 30:
+        return d
+    return None
+
+def find_listing(s, lst, name, exit_dt, circ_url, circ_text=None):
+    """1) circulars mentioned inside this circular (not itself)  2) a 'Listing of ...' circular for the company"""
+    own = re.search(r"CML(\d+)", circ_url or "")
+    own = own.group(1) if own else ""
+    try:
+        text = circ_text if circ_text is not None else get_text(s, circ_url)
+    except Exception:
+        text = ""
+    for num in re.findall(r"NSE/CML/(\d+)", text):
+        if num == own: continue
+        d = read_listing_date(s, f"{NSE_BASE}CML{num}.pdf", exit_dt)
+        if d: return d
+    key = norm_name(name)
+    for x in lst:
+        sub = x["subject"].lower()
+        if key and key in norm_name(x["subject"]) and "listing" in sub and x["url"] != circ_url:
+            d = read_listing_date(s, x["url"], exit_dt)
+            if d: return d
+    return None
 
 BSE_NOTICE_PAGE = "https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCirculars.aspx?page="
 BSE_LIST_PAGE = "https://www.bseindia.com/markets/MarketInfo/NoticesCirculars.aspx?id=0"
@@ -286,7 +332,7 @@ def load_csv(path):
 
 def sort_key(r):
     try: return datetime.strptime(r["Out of T2T"], DATE_FMT)
-    except Exception: return datetime(2100, 1, 1)
+    except Exception: return datetime(1900, 1, 1)
 
 def save_csv(rows):
     rows.sort(key=sort_key, reverse=True)
@@ -299,7 +345,6 @@ def save_csv(rows):
 # ---------------------------------------------------------------
 def main():
     rows = load_csv(CSV_FILE)
-    have = {(r["Exchange"], r["Symbol"], r["Out of T2T"]) for r in rows}
     lockin = load_lockin()
     added = 0
 
@@ -307,38 +352,63 @@ def main():
     try:
         s = nse_session()
         lst = nse_list(s, config.LOOKBACK_DAYS)
-        hit = [x for x in lst if matches(x["subject"], config.NSE_SUBJECT_KEYWORDS)
-               and matches(x["subject"], config.NSE_SUBJECT_MUST_ALSO_HAVE)]
+        hit = [x for x in lst if nse_subject_ok(x["subject"])]
         print(f"NSE: {len(lst)} circulars, {len(hit)} match your keyword")
         jobs += [("NSE", s, x, parse_nse) for x in hit]
     except Exception as e:
         print("NSE failed:", e)
+        s, lst = None, []
 
-    try:
-        bs, hits = bse_playwright(config.BSE_SCAN_DAYS)
-        jobs += [("BSE", bs, x, parse_bse) for x in hits]
-    except Exception as e:
-        print("BSE failed:", e)
+    # repair old rows whose Listing Date is blank or wrongly equal to the exit date
+    if s:
+        for r in rows:
+            if r.get("Exchange") != "NSE": continue
+            if r.get("Listing Date") and r["Listing Date"] != r.get("Out of T2T"): continue
+            try:
+                exit_dt = datetime.strptime(r["Out of T2T"], DATE_FMT)
+            except Exception:
+                continue
+            ld = lockin.get(norm_name(r["Co. Name"])) or find_listing(
+                s, lst, r["Co. Name"], exit_dt, r.get("Circular", ""))
+            r["Listing Date"] = fmt(ld)
+            print("Repaired listing date:", r["Co. Name"], "->", r["Listing Date"] or "blank")
 
+    if config.BSE_ENABLED:
+        try:
+            bs, hits = bse_playwright(config.BSE_SCAN_DAYS)
+            jobs += [("BSE", bs, x, parse_bse) for x in hits]
+        except Exception as e:
+            print("BSE failed:", e)
+
+    done_urls = {r.get("Circular") for r in rows if r.get("Circular")}
     for exch, sess, item, parser in jobs:
+        if item["url"] in done_urls:
+            continue
         print("Reading:", item["subject"][:80])
         try:
             text = item.get("text") or get_text(sess, item["url"])
         except Exception as e:
             print("   download failed:", e); continue
         exit_date, stocks = parser(text)
+        typ = nse_type(item["subject"], text) if exch == "NSE" else stock_type(item["subject"], text)
         if not exit_date or not stocks:
-            print("   no exit date / stock rows found - skipped"); continue
-        typ = stock_type(item["subject"], text)
+            if exch != "NSE":
+                print("   no exit date / stock rows found - skipped"); continue
+            name, sym, note = fallback_row_info(item["subject"], text)
+            print("   no 'rolling segment' table - saved with a note:", name)
+            rows.append({"Exchange": exch, "Listing Date": "", "Co. Name": name, "Symbol": sym,
+                         "Out of T2T": "", "Type": typ, "Circular": item["url"], "Note": note})
+            done_urls.add(item["url"]); added += 1
+            continue
         for sym, name in stocks:
-            if (exch, sym, fmt(exit_date)) in have: continue
             ld = lockin.get(norm_name(name))
             if not ld and exch == "NSE":
-                ld = listing_from_circular(sess, text)
+                ld = find_listing(sess, lst, name, exit_date, item["url"], text)
             rows.append({"Exchange": exch, "Listing Date": fmt(ld), "Co. Name": name,
                          "Symbol": sym, "Out of T2T": fmt(exit_date), "Type": typ,
-                         "Circular": item["url"]})
-            have.add((exch, sym, fmt(exit_date))); added += 1
+                         "Circular": item["url"], "Note": ""})
+            added += 1
+        done_urls.add(item["url"])
         time.sleep(1)
 
     # manual fixes win (matched on Exchange + Symbol)

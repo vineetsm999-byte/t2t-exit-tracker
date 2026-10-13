@@ -6,7 +6,6 @@ LOOKBACK_DAYS = 45          # how many days back to look on every run
 
 # A circular is picked up if its SUBJECT contains any of these (not case sensitive)
 NSE_SUBJECT_KEYWORDS = ["trade for trade"]
-NSE_SUBJECT_MUST_ALSO_HAVE = ["ipo", "demerg", "scheme of arrangement"]
 BSE_SUBJECT_KEYWORDS = ["change in group of equity shares"]
 
 # The circular TEXT must contain one of these phrases, so that we only keep
@@ -18,4 +17,7 @@ LOCKIN_CSV_URL = ("https://raw.githubusercontent.com/vineetsm999-byte/"
                   "ipo---lockin/main/lockin_data.csv")
 
 # BSE: how many past days of notices to check on each run
-BSE_SCAN_DAYS = 30
+BSE_SCAN_DAYS = 10
+
+# BSE: notices are read as PDFs (no browser). Set False to switch BSE off.
+BSE_ENABLED = True

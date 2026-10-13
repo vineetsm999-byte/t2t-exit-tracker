@@ -1,34 +1,43 @@
-Exchange,Listing Date,Co. Name,Symbol,Out of T2T,Type,Circular
-NSE,27-10-2026,R.K. Fashion Accessories Limited,RKFAL,27-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76852.pdf
-NSE,23-10-2026,Eventions Limited,EVENTIONS,23-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76807.pdf
-NSE,23-10-2026,Vishal Nirmiti Limited,VNL,23-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76804.pdf
-NSE,23-10-2026,Nityas Gems and Jewellery Limited,NITYAS,23-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76803.pdf
-NSE,22-10-2026,Green Asia Impex Limited,GREENASIA,22-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76760.pdf
-NSE,22-10-2026,Papadmalji Agro Foods Limited,PAPADMALJI,22-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76758.pdf
-NSE,06-10-2026,Shah Investor's Home Limited,SHAHINVEST,21-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76725.pdf
-NSE,06-10-2026,SRIT India Limited,SRIT,21-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76724.pdf
-NSE,05-10-2026,Bench Mark Infotech Services Limited,BMISL,19-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76695.pdf
-NSE,05-10-2026,Himalayan Solar Limited,HIMALAYAN,19-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76692.pdf
-NSE,15-10-2026,GSPL Transmission Limited,GSPLTRANS,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76633.pdf
-NSE,30-09-2026,Adroit Industries (India) Limited,ADROITIND,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76632.pdf
-NSE,30-09-2026,Swastika Infra Limited,SWASTIKAIN,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76631.pdf
-NSE,30-09-2026,Pooja Logistics Limited,POOJALOGIS,15-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76630.pdf
-NSE,15-10-2026,Coreintegra Consulting Services Limited,COREIN,15-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76629.pdf
-NSE,25-09-2026,Axiom Gas Engineering Limited,AXIOMGAS,12-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76543.pdf
-NSE,24-09-2026,Sonaselection India Limited,SONA,09-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76547.pdf
-NSE,24-09-2026,Kheria Autocomp Limited,KHERIAAUTO,09-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76546.pdf
-NSE,24-09-2026,SpectraA Technology Solutions Limited,SPECTRAA,09-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76545.pdf
-NSE,23-09-2026,Jindal Supreme (India) Limited,JSIPL,08-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76506.pdf
-NSE,21-09-2026,Manika Plastech Limited,MANIKA,06-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76463.pdf
-NSE,18-09-2026,Veegaland Developers Limited,VEEGALAND,05-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76409.pdf
-NSE,01-10-2026,Vinod Texworld Limited,VINOD,01-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76390.pdf
-NSE,11-09-2026,Qualiance International Limited,QUALIANCE,28-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76320.pdf
-NSE,08-09-2026,Rays of Belief Limited,MOMSBELIEF,23-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76235.pdf
-NSE,07-09-2026,Ashutosh Fibre Limited,ASHUTOSH,22-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76226.pdf
-NSE,07-09-2026,Shanti Inorganics Limited,SHANTIINOR,22-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76225.pdf
-NSE,04-09-2026,Priority Jewels Limited,PRIORITY,21-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76181.pdf
-NSE,02-09-2026,Sumax Engineering Limited,SUMAX,17-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76122.pdf
-NSE,17-09-2026,Annu Projects Limited,ANNU,17-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76121.pdf
-NSE,16-09-2026,ABH Healthcare Limited,ABH,16-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76118.pdf
-NSE,01-09-2026,Madhur Knit Crafts Limited,MADHURKNIT,16-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76117.pdf
-NSE,01-09-2026,Hy-Tech Engineers Limited,HTEL,16-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76116.pdf
+Exchange,Listing Date,Co. Name,Symbol,Out of T2T,Type,Circular,Note
+NSE,,R.K. Fashion Accessories Limited,RKFAL,27-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76852.pdf,
+NSE,,Triveni Power Transmission Limited,TRIVENIPT,27-10-2026,Other,https://nsearchives.nseindia.com/content/circulars/CML76851.pdf,
+NSE,,Eventions Limited,EVENTIONS,23-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76807.pdf,
+NSE,,Vishal Nirmiti Limited,VNL,23-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76804.pdf,
+NSE,,Nityas Gems and Jewellery Limited,NITYAS,23-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76803.pdf,
+NSE,,Green Asia Impex Limited,GREENASIA,22-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76760.pdf,
+NSE,,Papadmalji Agro Foods Limited,PAPADMALJI,22-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76758.pdf,
+NSE,06-10-2026,Shah Investor's Home Limited,SHAHINVEST,21-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76725.pdf,
+NSE,06-10-2026,SRIT India Limited,SRIT,21-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76724.pdf,
+NSE,05-10-2026,Bench Mark Infotech Services Limited,BMISL,19-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76695.pdf,
+NSE,05-10-2026,Himalayan Solar Limited,HIMALAYAN,19-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76692.pdf,
+NSE,,GSPL Transmission Limited,GSPLTRANS,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76633.pdf,
+NSE,30-09-2026,Adroit Industries (India) Limited,ADROITIND,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76632.pdf,
+NSE,30-09-2026,Swastika Infra Limited,SWASTIKAIN,15-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76631.pdf,
+NSE,30-09-2026,Pooja Logistics Limited,POOJALOGIS,15-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76630.pdf,
+NSE,,Coreintegra Consulting Services Limited,COREIN,15-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76629.pdf,
+NSE,25-09-2026,Axiom Gas Engineering Limited,AXIOMGAS,12-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76543.pdf,
+NSE,24-09-2026,Sonaselection India Limited,SONA,09-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76547.pdf,
+NSE,24-09-2026,Kheria Autocomp Limited,KHERIAAUTO,09-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76546.pdf,
+NSE,24-09-2026,SpectraA Technology Solutions Limited,SPECTRAA,09-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76545.pdf,
+NSE,23-09-2026,Jindal Supreme (India) Limited,JSIPL,08-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76506.pdf,
+NSE,21-09-2026,Manika Plastech Limited,MANIKA,06-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76463.pdf,
+NSE,18-09-2026,Veegaland Developers Limited,VEEGALAND,05-10-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76409.pdf,
+NSE,,Vinod Texworld Limited,VINOD,01-10-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76390.pdf,
+NSE,11-09-2026,Qualiance International Limited,QUALIANCE,28-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76320.pdf,
+NSE,08-09-2026,Rays of Belief Limited,MOMSBELIEF,23-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76235.pdf,
+NSE,07-09-2026,Ashutosh Fibre Limited,ASHUTOSH,22-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76226.pdf,
+NSE,07-09-2026,Shanti Inorganics Limited,SHANTIINOR,22-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76225.pdf,
+NSE,04-09-2026,Priority Jewels Limited,PRIORITY,21-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76181.pdf,
+NSE,02-09-2026,Sumax Engineering Limited,SUMAX,17-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76122.pdf,
+NSE,,Annu Projects Limited,ANNU,17-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76121.pdf,
+NSE,,ABH Healthcare Limited,ABH,16-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76118.pdf,
+NSE,01-09-2026,Madhur Knit Crafts Limited,MADHURKNIT,16-09-2026,SME,https://nsearchives.nseindia.com/content/circulars/CML76117.pdf,
+NSE,01-09-2026,Hy-Tech Engineers Limited,HTEL,16-09-2026,Mainboard,https://nsearchives.nseindia.com/content/circulars/CML76116.pdf,
+NSE,,Bhagyanagar India Limited,BHAGYANGR,,Demerger,https://nsearchives.nseindia.com/content/circulars/CML76678.pdf,"Check circular: No: 1763/2026 To All Members, Sub: Trade for Trade – Bhagyanagar India Limited (BHAGYANGR) Pursuant to Scheme of Arrangement , Bhagyanagar India Limited (BHAGYANGR) will be available for trading in Trade "
+NSE,,Veranda Learning Solutions Limited,VERANDA,,Demerger,https://nsearchives.nseindia.com/content/circulars/CML76617.pdf,"Check circular: No: 1731/2026 To All Members, Sub: Trade for Trade – Veranda Learning Solutions Limited (VERANDA) Pursuant to Scheme of Arrangement, Veranda Learning Solutions Limited (VERANDA) will be available for trad"
+NSE,,K.M. Sugar Mills Limited,KMSUGAR,,Demerger,https://nsearchives.nseindia.com/content/circulars/CML76575.pdf,"Check circular: No: 1714/2026 To All Members, Sub: Trade for Trade – K."
+NSE,,"Restriction in trading of securities of Supreme Engineering Limited (SUPREMEENG) in Trade for Trade category pursuant to non-compliance with Regulation 14 of the SEBI (LODR) Regulations, 2015 for the financial year ended 2025-26",,,Other,https://nsearchives.nseindia.com/content/circulars/CML76505.pdf,"Check circular: No: 1678/2026 To All Members, Subject: Restriction in trading of securities of Supreme Engineering Limited (SUPREMEENG) in Trade for Trade category pursuant to non -compliance with Regulation 14 of the SE"
+NSE,,HEG Advanced Materials Limited,HEGAM,,Other,https://nsearchives.nseindia.com/content/circulars/CML76439.pdf,"Check circular: No: 1646/2026 To All Members, Sub: Trade for Trade – HEG Advanced Materials Limited (HEGAM) Further to circular download reference no."
+NSE,,India Glycols Limited,INDIAGLYCO,,Other,https://nsearchives.nseindia.com/content/circulars/CML76327.pdf,"Check circular: No: 1590/2026 To All Members, Sub: Trade for Trade – India Glycols Limited (INDIAGLYCO) Further to circular download reference no."
+NSE,,Restriction in trading of securities in Trade for Trade category of SPEL Semiconductor Limited,,,Other,https://nsearchives.nseindia.com/content/circulars/CML76264.pdf,"Check circular: No: 1568/2026 To All Members, Subject:Restriction in trading of securities in Trade for Trade category of SPEL Semiconductor Limited SPEL Semiconductor Limited (Symbol-SPELS), (“the Company”) is under Per"
+NSE,,HEG Limited,HEG,,Demerger,https://nsearchives.nseindia.com/content/circulars/CML76106.pdf,"Check circular: No: 1495/2026 To All Members, Sub: Trade for Trade – HEG Limited (HEG) Pursuant to Scheme of Arrangement , HEG Limited (HEG) will be available for trading in Trade for Trade segment (Series: BE) with effe"

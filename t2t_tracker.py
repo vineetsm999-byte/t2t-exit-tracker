@@ -72,6 +72,8 @@ def date_after(text, phrases, window=60):
 # 2. HELPERS
 # ---------------------------------------------------------------
 def clean(text):
+    for bad, good in (("\u01af", "ff"), ("\ufb00", "ff"), ("\ufb01", "fi"), ("\ufb02", "fl"), ("\ufb03", "ffi")):
+        text = text.replace(bad, good)       # PDF ligatures: 'e\u01afect' -> 'effect'
     return re.sub(r"[ \t]+", " ", text.replace("\r", ""))
 
 def pdf_text(content):
@@ -257,6 +259,50 @@ def find_listing(s, lst, name, exit_dt, circ_url, circ_text=None):
             if d: return d
     return None
 
+BSE_PDF = "https://www.bseindia.com/downloads/UploadDocs/Notices/{id}/{id}.pdf"
+BSE_SEEN = "bse_seen.txt"
+
+def bse_pdf_scan(days):
+    """BSE notices are numbered like 20260602-3 (date-number) and each one is a PDF at a fixed address.
+    We try the numbers one by one for the last few days, keep PDFs whose text says
+    'Change in Group of Equity Shares', and remember which numbers we already checked."""
+    seen = set(open(BSE_SEEN).read().split()) if os.path.exists(BSE_SEEN) else set()
+    sess = requests.Session()
+    sess.headers.update({"User-Agent": UA, "Referer": "https://www.bseindia.com/",
+                         "Accept": "application/pdf,*/*"})
+    hits, ok, codes, shown = [], 0, {}, False
+    today = datetime.now().strftime("%Y%m%d")
+    for back in range(days):
+        day = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
+        n, misses = 1, 0
+        while misses < 4 and n < 250:
+            nid = f"{day}-{n}"; n += 1
+            if nid in seen:
+                misses = 0; continue
+            url = BSE_PDF.format(id=nid)
+            try:
+                r = sess.get(url, timeout=25)
+            except Exception as e:
+                codes["error"] = codes.get("error", 0) + 1; misses += 1
+                if not shown: print("   BSE debug:", nid, "request error:", e); shown = True
+                continue
+            codes[r.status_code] = codes.get(r.status_code, 0) + 1
+            if r.status_code == 200 and r.content[:4] == b"%PDF":
+                misses = 0; ok += 1
+                if day != today: seen.add(nid)           # today's list may still grow
+                text = clean(pdf_text(r.content))
+                if matches(flat(text), config.BSE_SUBJECT_KEYWORDS):
+                    print("   BSE notice found:", nid)
+                    hits.append({"subject": f"BSE notice {nid}: Change in Group of Equity Shares",
+                                 "url": url, "text": text})
+            else:
+                misses += 1
+                if not shown:
+                    print("   BSE debug:", nid, "status", r.status_code, "|", flat(r.text)[:120]); shown = True
+    open(BSE_SEEN, "w").write("\n".join(sorted(seen)))
+    print(f"BSE: opened {ok} notice PDFs, responses {codes}, {len(hits)} match your keyword")
+    return None, hits
+
 BSE_NOTICE_PAGE = "https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCirculars.aspx?page="
 BSE_LIST_PAGE = "https://www.bseindia.com/markets/MarketInfo/NoticesCirculars.aspx?id=0"
 BSE_LIST_API = "https://api.bseindia.com/BseIndiaAPI/api/getDataAdvance_New/w"
@@ -406,9 +452,9 @@ def main():
             except Exception as e:
                 print("   ERROR while repairing", r.get("Co. Name"), "->", repr(e))
 
-    if getattr(config, "BSE_ENABLED", False):
+    if getattr(config, "BSE_ENABLED", True):
         try:
-            bs, hits = bse_playwright(config.BSE_SCAN_DAYS)
+            bs, hits = bse_pdf_scan(config.BSE_SCAN_DAYS)
             jobs += [("BSE", bs, x, parse_bse) for x in hits]
         except Exception as e:
             print("BSE failed:", e)

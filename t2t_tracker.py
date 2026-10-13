@@ -343,6 +343,39 @@ def save_csv(rows):
 # ---------------------------------------------------------------
 # 6. MAIN
 # ---------------------------------------------------------------
+def process_item(exch, sess, item, parser, rows, lockin, lst, done_urls):
+    """Handle ONE circular. Returns how many rows it added."""
+    if item["url"] in done_urls:
+        return 0
+    print("Reading:", item["subject"][:80])
+    try:
+        text = item.get("text") or get_text(sess, item["url"])
+    except Exception as e:
+        print("   download failed:", e); return 0
+    exit_date, stocks = parser(text)
+    typ = nse_type(item["subject"], text) if exch == "NSE" else stock_type(item["subject"], text)
+    if not exit_date or not stocks:
+        if exch != "NSE":
+            print("   no exit date / stock rows found - skipped"); return 0
+        name, sym, note = fallback_row_info(item["subject"], text)
+        print("   no 'rolling segment' table - saved with a note:", name)
+        rows.append({"Exchange": exch, "Listing Date": "", "Co. Name": name, "Symbol": sym,
+                     "Out of T2T": "", "Type": typ, "Circular": item["url"], "Note": note})
+        done_urls.add(item["url"])
+        return 1
+    n = 0
+    for sym, name in stocks:
+        ld = lockin.get(norm_name(name))
+        if not ld and exch == "NSE":
+            ld = find_listing(sess, lst, name, exit_date, item["url"], text)
+        rows.append({"Exchange": exch, "Listing Date": fmt(ld), "Co. Name": name,
+                     "Symbol": sym, "Out of T2T": fmt(exit_date), "Type": typ,
+                     "Circular": item["url"], "Note": ""})
+        n += 1
+    done_urls.add(item["url"])
+    time.sleep(1)
+    return n
+
 def main():
     rows = load_csv(CSV_FILE)
     lockin = load_lockin()
@@ -362,18 +395,18 @@ def main():
     # repair old rows whose Listing Date is blank or wrongly equal to the exit date
     if s:
         for r in rows:
-            if r.get("Exchange") != "NSE": continue
-            if r.get("Listing Date") and r["Listing Date"] != r.get("Out of T2T"): continue
             try:
+                if r.get("Exchange") != "NSE": continue
+                if r.get("Listing Date") and r["Listing Date"] != r.get("Out of T2T"): continue
                 exit_dt = datetime.strptime(r["Out of T2T"], DATE_FMT)
-            except Exception:
-                continue
-            ld = lockin.get(norm_name(r["Co. Name"])) or find_listing(
-                s, lst, r["Co. Name"], exit_dt, r.get("Circular", ""))
-            r["Listing Date"] = fmt(ld)
-            print("Repaired listing date:", r["Co. Name"], "->", r["Listing Date"] or "blank")
+                ld = lockin.get(norm_name(r["Co. Name"])) or find_listing(
+                    s, lst, r["Co. Name"], exit_dt, r.get("Circular", ""))
+                r["Listing Date"] = fmt(ld)
+                print("Repaired listing date:", r["Co. Name"], "->", r["Listing Date"] or "blank")
+            except Exception as e:
+                print("   ERROR while repairing", r.get("Co. Name"), "->", repr(e))
 
-    if config.BSE_ENABLED:
+    if getattr(config, "BSE_ENABLED", False):
         try:
             bs, hits = bse_playwright(config.BSE_SCAN_DAYS)
             jobs += [("BSE", bs, x, parse_bse) for x in hits]
@@ -382,34 +415,12 @@ def main():
 
     done_urls = {r.get("Circular") for r in rows if r.get("Circular")}
     for exch, sess, item, parser in jobs:
-        if item["url"] in done_urls:
-            continue
-        print("Reading:", item["subject"][:80])
         try:
-            text = item.get("text") or get_text(sess, item["url"])
+            added += process_item(exch, sess, item, parser, rows, lockin, lst, done_urls)
         except Exception as e:
-            print("   download failed:", e); continue
-        exit_date, stocks = parser(text)
-        typ = nse_type(item["subject"], text) if exch == "NSE" else stock_type(item["subject"], text)
-        if not exit_date or not stocks:
-            if exch != "NSE":
-                print("   no exit date / stock rows found - skipped"); continue
-            name, sym, note = fallback_row_info(item["subject"], text)
-            print("   no 'rolling segment' table - saved with a note:", name)
-            rows.append({"Exchange": exch, "Listing Date": "", "Co. Name": name, "Symbol": sym,
-                         "Out of T2T": "", "Type": typ, "Circular": item["url"], "Note": note})
-            done_urls.add(item["url"]); added += 1
-            continue
-        for sym, name in stocks:
-            ld = lockin.get(norm_name(name))
-            if not ld and exch == "NSE":
-                ld = find_listing(sess, lst, name, exit_date, item["url"], text)
-            rows.append({"Exchange": exch, "Listing Date": fmt(ld), "Co. Name": name,
-                         "Symbol": sym, "Out of T2T": fmt(exit_date), "Type": typ,
-                         "Circular": item["url"], "Note": ""})
-            added += 1
-        done_urls.add(item["url"])
-        time.sleep(1)
+            import traceback
+            print("   ERROR on this circular, skipped:", item.get("subject", "")[:70], "->", repr(e))
+            traceback.print_exc()
 
     # manual fixes win (matched on Exchange + Symbol)
     for o in load_csv(OVERRIDE_FILE):

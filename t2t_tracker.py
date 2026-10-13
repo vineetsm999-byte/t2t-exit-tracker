@@ -285,7 +285,7 @@ def find_listing(s, lst, name, exit_dt, circ_url, circ_text=None):
     return None
 
 BSE_PDF = "https://www.bseindia.com/downloads/UploadDocs/Notices/{id}/{id}.pdf"
-BSE_SEEN = "bse_seen.txt"
+BSE_SEEN = "bse_seen2.txt"   # new name: ignores the old cache that skipped unread notices
 BSE_LIST_FILE = "bse_listings.csv"
 BSE_LISTINGS = {}      # normalised company name -> listing date (from BSE listing notices)
 
@@ -333,13 +333,14 @@ def bse_pdf_scan(days):
             codes[r.status_code] = codes.get(r.status_code, 0) + 1
             if r.status_code == 200 and r.content[:4] == b"%PDF":
                 misses = 0; ok += 1
-                if day != today: seen.add(nid)           # today's list may still grow
                 text = clean(pdf_text(r.content))
                 note_bse_listing(text)
                 if matches(flat(text), config.BSE_SUBJECT_KEYWORDS):
                     print("   BSE notice found:", nid)
                     hits.append({"subject": f"BSE notice {nid}: Change in Group of Equity Shares",
                                  "url": url, "text": text})
+                elif day != today:
+                    seen.add(nid)            # remember only notices we do NOT need again
             else:
                 misses += 1
                 if not shown:

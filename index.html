@@ -5,62 +5,149 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>T2T Exit Tracker</title>
 <style>
-  :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--hd:#f3f4f6;--soon:#fff4cc;--today:#ffd6d6}
-  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--fg:#eee;--mut:#9aa;--line:#333;--hd:#22252c;--soon:#4a3f12;--today:#5a1f1f}}
-  body{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px}
-  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--mut);font-size:13px;margin-bottom:12px}
-  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  button,input{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:14px}
-  button.on{background:var(--fg);color:var(--bg)}
-  .wrap{overflow-x:auto} table{border-collapse:collapse;width:100%;font-size:14px;white-space:nowrap}
-  th,td{border:1px solid var(--line);padding:8px;text-align:left}
-  th{background:var(--hd)} .soon{background:var(--soon)} .today{background:var(--today)} a{color:inherit}
+  :root{--bg:#f6f7f9;--card:#fff;--fg:#1b1f24;--mut:#6b7280;--line:#e5e7eb;--hd:#f3f4f6;
+        --red:#dc2626;--redbg:#fee2e2;--amb:#b45309;--ambbg:#fef3c7;--grn:#15803d;--grnbg:#dcfce7;--gry:#6b7280;--grybg:#eef0f3;--acc:#2563eb}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--fg:#e8eaed;--mut:#9aa3af;--line:#2a2f3a;--hd:#1e222b;
+        --redbg:#4a1d1d;--red:#fca5a5;--ambbg:#4a3a10;--amb:#fcd34d;--grnbg:#12351f;--grn:#86efac;--grybg:#252a34;--gry:#a1a8b3;--acc:#60a5fa}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1{font-size:20px;margin:0}
+  .sub{color:var(--mut);font-size:12px;margin:2px 0 14px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .stat b{display:block;font-size:22px;line-height:1.2} .stat span{color:var(--mut);font-size:12px}
+  .stat.red b{color:var(--red)} .stat.amb b{color:var(--amb)} .stat.grn b{color:var(--grn)}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  button,input,select{font:inherit;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+  button{cursor:pointer} button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  input{min-width:200px;flex:1;max-width:280px}
+  .tablebox{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:75vh}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+  th{background:var(--hd);position:sticky;top:0;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);cursor:pointer;user-select:none;z-index:1}
+  th.sorted::after{content:" \25B2"} th.sorted.desc::after{content:" \25BC"}
+  tr:last-child td{border-bottom:none}
+  td.name{white-space:normal;min-width:240px;max-width:380px;font-weight:600}
+  td.name small{display:block;font-weight:400;color:var(--mut);font-size:12px;margin-top:2px}
+  td.mono{font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .b-red{background:var(--redbg);color:var(--red)} .b-amb{background:var(--ambbg);color:var(--amb)}
+  .b-grn{background:var(--grnbg);color:var(--grn)} .b-gry{background:var(--grybg);color:var(--gry)}
+  .tag{font-size:12px;color:var(--mut)} a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+  .empty{padding:24px;text-align:center;color:var(--mut)}
+  @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)} input{max-width:none}}
 </style>
 </head>
 <body>
-<h1>IPO &amp; Demerger T2T Exit Tracker</h1>
-<div class="sub" id="info">Loading...</div>
-<div class="bar" id="bar"></div>
-<div class="wrap"><table><thead><tr>
-<th>Exchange</th><th>Listing Date</th><th>Co. Name</th><th>Symbol</th><th>Out of T2T</th><th>Days left</th><th>Circular</th>
-</tr></thead><tbody id="rows"></tbody></table></div>
+<div class="wrap">
+  <h1>IPO &amp; Demerger T2T Exit Tracker</h1>
+  <div class="sub" id="info">Loading...</div>
+  <div class="stats">
+    <div class="stat red"><b id="s0">-</b><span>Exit today</span></div>
+    <div class="stat amb"><b id="s3">-</b><span>Exit in next 3 days</span></div>
+    <div class="stat grn"><b id="sup">-</b><span>Upcoming exits</span></div>
+    <div class="stat"><b id="stot">-</b><span>Total tracked</span></div>
+  </div>
+  <div class="bar" id="bar"></div>
+  <div class="tablebox"><table>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</div>
 <script>
-let data=[], seg="All", q="", upcoming=false;
+const COLS=[["Exchange","Exchange"],["Listing Date","Listing Date"],["Co. Name","Co. Name"],["Symbol","Symbol"],
+            ["Out of T2T","Out of T2T"],["_left","Days left"],["Type","Type"],["Circular","Circular"]];
+let data=[], seg="All", exch="All", q="", upcoming=false, sortKey="Out of T2T", desc=false;
 const today=new Date(); today.setHours(0,0,0,0);
-function parse(s){ if(!s) return null; const [d,m,y]=s.split("-").map(Number); return new Date(y,m-1,d); }
-function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function parse(s){ if(!s) return null; const p=s.split("-").map(Number); if(p.length!==3||p.some(isNaN)) return null; return new Date(p[2],p[1]-1,p[0]); }
+function left(r){ const d=parse(r["Out of T2T"]); return d?Math.round((d-today)/864e5):null; }
 function csv(t){ const rows=[]; let r=[],c="",inq=false;
   for(let i=0;i<t.length;i++){const ch=t[i];
     if(inq){ if(ch=='"'&&t[i+1]=='"'){c+='"';i++;} else if(ch=='"') inq=false; else c+=ch; }
     else if(ch=='"') inq=true; else if(ch==','){r.push(c);c="";}
     else if(ch=='\n'){r.push(c);rows.push(r);r=[];c="";} else if(ch!='\r') c+=ch; }
   if(c||r.length){r.push(c);rows.push(r);} return rows; }
+function badge(l){
+  if(l===null) return '<span class="badge b-gry">-</span>';
+  if(l<0) return '<span class="badge b-gry">Exited</span>';
+  if(l===0) return '<span class="badge b-red">Today</span>';
+  if(l<=3) return '<span class="badge b-amb">'+l+' day'+(l>1?'s':'')+'</span>';
+  return '<span class="badge b-grn">'+l+' days</span>';
+}
+function sortVal(r){
+  if(sortKey==="_left"||sortKey==="Out of T2T"||sortKey==="Listing Date"){
+    const d=parse(sortKey==="_left"?r["Out of T2T"]:r[sortKey]); return d?d.getTime():null; }
+  return (r[sortKey]||"").toLowerCase();
+}
+function visible(){
+  let v=data.filter(r=>(seg==="All"||r.Type===seg)&&(exch==="All"||r.Exchange===exch)
+      &&(!q||(r["Co. Name"]+" "+r.Symbol).toLowerCase().includes(q))
+      &&(!upcoming||(left(r)!==null&&left(r)>=0)));
+  v.sort((a,b)=>{ const x=sortVal(a), y=sortVal(b);
+    if(x===null&&y===null) return 0; if(x===null) return 1; if(y===null) return -1;   // blanks last
+    return (x<y?-1:x>y?1:0)*(desc?-1:1); });
+  return v;
+}
+function head(){
+  const h=document.getElementById("head"); h.innerHTML="";
+  COLS.forEach(([k,label])=>{ const th=document.createElement("th"); th.textContent=label;
+    if(k===sortKey) th.className="sorted"+(desc?" desc":"");
+    th.onclick=()=>{ if(sortKey===k) desc=!desc; else {sortKey=k; desc=false;} head(); draw(); };
+    h.appendChild(th); });
+}
 function draw(){
   const body=document.getElementById("rows"); body.innerHTML="";
-  data.filter(r=>(seg=="All"||r.Type==seg)&&(!q||(r["Co. Name"]+r.Symbol+r.Exchange).toLowerCase().includes(q))
-     &&(!upcoming||(parse(r["Out of T2T"])&&parse(r["Out of T2T"])>=today)))
-   .forEach(r=>{
-    const d=parse(r["Out of T2T"]); const left=d?Math.round((d-today)/864e5):"";
-    const tr=document.createElement("tr");
-    if(d&&left===0) tr.className="today"; else if(d&&left>0&&left<=3) tr.className="soon";
-    const link=r.Circular?`<a href="${esc(r.Circular)}" target="_blank" rel="noopener">PDF</a>`:"";
-    [esc(r.Exchange),esc(r["Listing Date"]),esc(r["Co. Name"]),esc(r.Symbol),esc(r["Out of T2T"]),
-     left===""?"-":(left<0?"exited":left),link].forEach(v=>{const e=document.createElement("td");e.innerHTML=v;tr.appendChild(e);});
+  const v=visible();
+  if(!v.length){ body.innerHTML='<tr><td colspan="8" class="empty">No stocks match.</td></tr>'; return; }
+  v.forEach(r=>{
+    const l=left(r), tr=document.createElement("tr");
+    const link=r.Circular?'<a href="'+esc(r.Circular)+'" target="_blank" rel="noopener">PDF</a>':"";
+    const note=r.Note?'<small>'+esc(r.Note)+'</small>':"";
+    tr.innerHTML=
+      '<td>'+esc(r.Exchange)+'</td>'+
+      '<td class="mono">'+(esc(r["Listing Date"])||'<span class="tag">-</span>')+'</td>'+
+      '<td class="name">'+esc(r["Co. Name"])+note+'</td>'+
+      '<td>'+(esc(r.Symbol)||'<span class="tag">-</span>')+'</td>'+
+      '<td class="mono"><b>'+(esc(r["Out of T2T"])||'<span class="tag">-</span>')+'</b></td>'+
+      '<td>'+badge(l)+'</td>'+
+      '<td><span class="tag">'+esc(r.Type)+'</span></td>'+
+      '<td>'+link+'</td>';
     body.appendChild(tr); });
+}
+function stats(){
+  const ls=data.map(left).filter(l=>l!==null);
+  document.getElementById("s0").textContent=ls.filter(l=>l===0).length;
+  document.getElementById("s3").textContent=ls.filter(l=>l>=1&&l<=3).length;
+  document.getElementById("sup").textContent=ls.filter(l=>l>=0).length;
+  document.getElementById("stot").textContent=data.length;
 }
 function bar(){
   const b=document.getElementById("bar");
-  ["All","Mainboard","SME","Demerger"].forEach(s=>{const x=document.createElement("button");x.textContent=s;
-    x.onclick=()=>{seg=s;[...b.querySelectorAll("button.seg")].forEach(y=>y.classList.toggle("on",y===x));draw();};
-    x.className="seg"+(s=="All"?" on":""); b.appendChild(x);});
-  const u=document.createElement("button");u.textContent="Upcoming only";u.onclick=()=>{upcoming=!upcoming;u.classList.toggle("on",upcoming);draw();};b.appendChild(u);
-  const i=document.createElement("input");i.placeholder="Search company / symbol...";i.oninput=()=>{q=i.value.toLowerCase();draw();};b.appendChild(i);
+  ["All","Mainboard","SME","Demerger","Other"].forEach(s=>{
+    const x=document.createElement("button"); x.textContent=s; x.className="seg"+(s==="All"?" on":"");
+    x.onclick=()=>{ seg=s; [...b.querySelectorAll("button.seg")].forEach(y=>y.classList.toggle("on",y===x)); draw(); };
+    b.appendChild(x); });
+  const e=document.createElement("select");
+  ["All","NSE","BSE"].forEach(o=>{const op=document.createElement("option"); op.value=o; op.textContent=o==="All"?"All exchanges":o; e.appendChild(op);});
+  e.onchange=()=>{exch=e.value; draw();}; b.appendChild(e);
+  const u=document.createElement("button"); u.textContent="Upcoming only";
+  u.onclick=()=>{ upcoming=!upcoming; u.classList.toggle("on",upcoming); draw(); }; b.appendChild(u);
+  const i=document.createElement("input"); i.placeholder="Search company / symbol...";
+  i.oninput=()=>{ q=i.value.toLowerCase(); draw(); }; b.appendChild(i);
+  const c=document.createElement("button"); c.textContent="Copy for Sheet";
+  c.onclick=()=>{
+    const tsv=visible().map(r=>[r.Exchange,r["Listing Date"],r["Co. Name"],r.Symbol,r["Out of T2T"]].join("\t")).join("\n");
+    const done=()=>{ c.textContent="Copied!"; setTimeout(()=>c.textContent="Copy for Sheet",1500); };
+    if(navigator.clipboard) navigator.clipboard.writeText(tsv).then(done,()=>{}); };
+  b.appendChild(c);
 }
-fetch("t2t_data.csv?"+Date.now()).then(r=>r.text()).then(t=>{
+fetch("t2t_data.csv?"+Date.now()).then(r=>{ if(!r.ok) throw 0; return r.text(); }).then(t=>{
   const rows=csv(t).filter(r=>r.length>1); const h=rows.shift();
   data=rows.map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]||""])));
-  document.getElementById("info").textContent=data.length+" stocks. Yellow = exits within 3 days, red = exits today.";
-  bar(); draw();
+  document.getElementById("info").textContent="Click any column heading to sort. Yellow badge = exits within 3 days, red = exits today.";
+  stats(); bar(); head(); draw();
 }).catch(()=>document.getElementById("info").textContent="Could not load t2t_data.csv");
 </script>
 </body>

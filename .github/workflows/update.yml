@@ -17,12 +17,11 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - run: playwright install --with-deps chromium
       - run: python t2t_tracker.py
       - name: Save changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add t2t_data.csv
+          git add -A
           git diff --cached --quiet || git commit -m "Daily T2T update"
           git push

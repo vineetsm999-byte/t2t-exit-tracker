@@ -165,19 +165,21 @@ def parse_bse(text):
     if "trade for trade" not in low or "rolling" not in low:
         return None, []
     exit_date = date_after(flat, ["with effect from", "w.e.f", "wef", "effective from"])
-    m = re.search(r"shares of\s+((?:(?!shares of).)+?)\s+[-\u2013]\s+[^()]*?\(\s*scrip code\s*:?\s*(\d{5,6})\s*\)", flat, re.I)
+    m = re.search(r"shares of\s+((?:(?!shares of).)+?)\s*(?:[-\u2013]\s*(?:SME\s+)?IPO\s*)?\(\s*scrip code\s*:?\s*(\d{5,6})\s*\)", flat, re.I)
     if not m:
         return exit_date, []
-    return exit_date, [(m.group(2), m.group(1).strip())]
+    nm = re.sub(r"\s*[-\u2013]\s*(SME\s+)?IPO\s*$", "", m.group(1).strip(), flags=re.I).strip()
+    return exit_date, [(m.group(2), nm)]
 
 TGRP = r"(?:[\u2018\u2019'\"`]\s*(?:t|xt|mt|ts)\s*[\u2018\u2019'\"`]\s*group|\b(?:t|xt|mt|ts)\s+group\b)"
 
 def bse_fallback_info(text):
-    """Other BSE group-change wordings, e.g. 'transferred from B Group to T group w.e.f. 8 October 2026'.
-    Returns (name, scrip_code, exit_date_or_None, note) or None if the notice is not about T / MT group."""
+    """Other BSE group-change wordings. Returns (name, scrip_code, exit_date_or_None, note) or None
+    if the notice is not about T / MT group."""
     f = re.sub(r"\s+", " ", clean(text))
     low = f.lower()
-    if not (re.search(TGRP, low) or re.search(r"trade[\s-]*(for|to)[\s-]*trade", low)):
+    tpat = TGRP + r"|trade[\s-]*(?:for|to)[\s-]*trade|\bt2t\b"
+    if not re.search(tpat, low):
         return None
     m = re.search(r"shares of\s+((?:(?!shares of).)+?)\s*\(\s*scrip\s*code\s*:?\s*(\d{5,6})\s*\)", f, re.I)
     name, code = (m.group(1), m.group(2)) if m else ("", "")
@@ -187,12 +189,27 @@ def bse_fallback_info(text):
     if not name:
         mn = re.search(r"shares of\s+((?:(?!shares of).)+?(?:Limited|Ltd\.?))", f, re.I)
         name = mn.group(1) if mn else "BSE scrip " + code
-    name = re.sub(r"\s+[-\u2013]\s+(SME\s+)?IPO\s*$", "", name).strip()
-    d = date_after(f, ["w.e.f", "wef", "with effect from", "effective from", "effective date"])
-    t = r"[\u2018\u2019'\"`]?\s*(?:t|xt|mt|ts)\s*[\u2018\u2019'\"`]?"
-    if re.search(r"from\s*" + t + r"\s*(?:group)?\s*to", low):
-        return name, code, d, "Moves OUT of T group - check notice"
-    return name, code, None, ("Moves INTO T group w.e.f. " + fmt(d) if d else "T group notice - check notice")
+    name = re.sub(r"\s*[-\u2013]\s*(SME\s+)?IPO\s*$", "", name.strip(), flags=re.I).strip()
+
+    # the sentence that says what happens: starts at transferred / shifted / moved
+    mv = re.search(r"(transferred|shifted|moved|migrat\w*)", low)
+    seg = f[mv.start(): mv.start() + 320] if mv else f[:320]
+    d = None
+    found = find_dates(seg)
+    if found: d = found[0][1]
+    if d is None:
+        d = date_after(f, ["w.e.f", "wef", "with effect from", "effective from", "effective date"])
+    # direction: is the T / MT group before or after the word 'to'?
+    mt = re.search(r"\bto\b", seg)
+    left, right = (seg[:mt.start()], seg[mt.start():]) if mt else (seg, "")
+    lt = bool(re.search(tpat, left.lower())); rt = bool(re.search(tpat, right.lower()))
+    if not mt:
+        lt = rt = False                      # no 'from ... to ...' wording: direction unknown
+    if lt and not rt:
+        return name, code, d, "Moves OUT of T group" + (" (check notice)" if not d else "")
+    if rt and not lt:
+        return name, code, None, "Moves INTO T group" + (" w.e.f. " + fmt(d) if d else "")
+    return name, code, None, "T group notice - check: " + seg[:150]
 
 # ---------------------------------------------------------------
 # 4. FETCHING
@@ -306,6 +323,14 @@ def note_bse_listing(text):
     d = date_after(f, ["effective from", "w.e.f", "with effect from"])
     if d: BSE_LISTINGS[norm_name(m.group(1))] = d
 
+def bse_candidate(text):
+    """A BSE notice we should read: subject says 'Change in Group of Equity Shares', OR the body itself
+    says a scrip moves from Trade for Trade segment to Rolling segment (some PDFs have no header text)."""
+    f = flat(text).lower()
+    if matches(f, config.BSE_SUBJECT_KEYWORDS):
+        return True
+    return "scrip code" in f and "trade for trade segment" in f and "rolling segment" in f
+
 def bse_pdf_scan(days):
     """BSE notices are numbered like 20260602-3 (date-number) and each one is a PDF at a fixed address.
     We try the numbers one by one for the last few days, keep PDFs whose text says
@@ -335,7 +360,7 @@ def bse_pdf_scan(days):
                 misses = 0; ok += 1
                 text = clean(pdf_text(r.content))
                 note_bse_listing(text)
-                if matches(flat(text), config.BSE_SUBJECT_KEYWORDS):
+                if bse_candidate(text):
                     print("   BSE notice found:", nid)
                     hits.append({"subject": f"BSE notice {nid}: Change in Group of Equity Shares",
                                  "url": url, "text": text})
@@ -519,6 +544,9 @@ def main():
         except Exception as e:
             print("BSE failed:", e)
 
+    # BSE rows made by the "other wording" path are rebuilt every run, so parser improvements apply
+    rows[:] = [r for r in rows if not (r.get("Exchange") == "BSE" and
+               (r.get("Note") or "").startswith(("Moves ", "T group notice")))]
     done_urls = {r.get("Circular") for r in rows if r.get("Circular")}
     for exch, sess, item, parser in jobs:
         try:
